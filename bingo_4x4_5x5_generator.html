@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bingo 4x4 / 5x5 Generator</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: Arial, "PingFang TC", "Noto Sans TC", sans-serif;
+    margin: 0;
+    padding: 20px;
+    background: #f6f6f6;
+    color: #111;
+  }
+  .controls {
+    max-width: 960px;
+    margin: 0 auto 20px auto;
+    background: white;
+    padding: 18px;
+    border-radius: 14px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+  }
+  h1 { margin: 0 0 8px; font-size: 26px; }
+  p { margin: 6px 0 14px; line-height: 1.5; }
+  label { font-weight: bold; margin-right: 8px; }
+  textarea {
+    width: 100%;
+    height: 190px;
+    font-size: 17px;
+    padding: 12px;
+    border: 1px solid #bbb;
+    border-radius: 10px;
+    resize: vertical;
+  }
+  .row { margin: 12px 0; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  select, input[type="number"], input[type="text"] {
+    font-size: 16px;
+    padding: 8px;
+    border: 1px solid #aaa;
+    border-radius: 8px;
+  }
+  input[type="number"] { width: 90px; }
+  input[type="text"] { width: 220px; }
+  button {
+    font-size: 16px;
+    padding: 10px 16px;
+    border: 0;
+    border-radius: 10px;
+    background: #111;
+    color: white;
+    cursor: pointer;
+  }
+  button.secondary { background: #555; }
+  button:hover { opacity: 0.85; }
+  .hint { font-size: 14px; color: #555; }
+
+  .page {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0 auto 18px auto;
+    background: white;
+    padding: 14mm;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    page-break-after: always;
+  }
+  .title {
+    font-size: 34px;
+    font-weight: bold;
+    margin-bottom: 10mm;
+    text-align: center;
+  }
+  .bingo {
+    width: 175mm;
+    height: 175mm;
+    display: grid;
+    border: 3px solid #000;
+  }
+  .cell {
+    border: 1.5px solid #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 5mm;
+    font-size: 24px;
+    line-height: 1.15;
+    word-break: break-word;
+    white-space: pre-wrap;
+  }
+  .footer {
+    margin-top: 8mm;
+    font-size: 14px;
+    color: #555;
+  }
+
+  @media print {
+    body { background: white; padding: 0; }
+    .controls { display: none; }
+    .page { margin: 0; box-shadow: none; page-break-after: always; }
+    @page { size: A4 portrait; margin: 0; }
+  }
+</style>
+</head>
+<body>
+  <div class="controls">
+    <h1>4x4 / 5x5 Bingo 產生器</h1>
+    <p>每行輸入一個內容。可以由 Excel / Numbers 直接 copy 一欄再貼上。按「產生 Bingo」後，每張都會隨機排列。</p>
+
+    <textarea id="items">蘋果
+香蕉
+橙
+西瓜
+葡萄
+草莓
+菠蘿
+芒果
+桃
+梨
+檸檬
+奇異果
+貓
+狗
+兔仔
+獅子
+大象
+熊貓
+長頸鹿
+企鵝
+火車
+飛機
+巴士
+船
+單車
+彩虹
+太陽
+月亮
+星星
+雲</textarea>
+
+    <div class="row">
+      <label>格數：</label>
+      <select id="gridSize">
+        <option value="4">4 x 4</option>
+        <option value="5">5 x 5</option>
+      </select>
+
+      <label>張數：</label>
+      <input id="cardCount" type="number" min="1" max="50" value="1">
+
+      <label>標題：</label>
+      <input id="titleText" type="text" value="BINGO">
+    </div>
+
+    <div class="row">
+      <label><input id="freeCenter" type="checkbox"> 5x5 中間 FREE 格</label>
+      <span class="hint">只會在 5x5 生效</span>
+    </div>
+
+    <div class="row">
+      <button onclick="generateCards()">產生 Bingo</button>
+      <button class="secondary" onclick="window.print()">列印 / 儲存 PDF</button>
+      <button class="secondary" onclick="clearItems()">清空內容</button>
+    </div>
+
+    <div class="hint" id="status"></div>
+  </div>
+
+  <div id="output"></div>
+
+<script>
+function getItems() {
+  return document.getElementById('items').value
+    .split(/\n|\t|,/)
+    .map(x => x.trim())
+    .filter(x => x.length > 0);
+}
+
+function shuffle(array) {
+  const a = array.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function adjustFontSize(cell, text) {
+  const len = text.length;
+  if (len <= 4) cell.style.fontSize = '28px';
+  else if (len <= 8) cell.style.fontSize = '24px';
+  else if (len <= 14) cell.style.fontSize = '20px';
+  else cell.style.fontSize = '16px';
+}
+
+function generateCards() {
+  const items = getItems();
+  const size = parseInt(document.getElementById('gridSize').value, 10);
+  const count = Math.max(1, Math.min(50, parseInt(document.getElementById('cardCount').value || '1', 10)));
+  const titleText = document.getElementById('titleText').value || 'BINGO';
+  const useFree = document.getElementById('freeCenter').checked && size === 5;
+  const needed = useFree ? 24 : size * size;
+  const output = document.getElementById('output');
+  const status = document.getElementById('status');
+
+  if (items.length < needed) {
+    alert('內容唔夠：' + size + 'x' + size + (useFree ? '（有 FREE 格）' : '') + ' 最少需要 ' + needed + ' 個內容。');
+    return;
+  }
+
+  output.innerHTML = '';
+
+  for (let c = 1; c <= count; c++) {
+    let selected = shuffle(items).slice(0, needed);
+
+    const page = document.createElement('div');
+    page.className = 'page';
+
+    const title = document.createElement('div');
+    title.className = 'title';
+    title.textContent = titleText;
+    page.appendChild(title);
+
+    const bingo = document.createElement('div');
+    bingo.className = 'bingo';
+    bingo.style.gridTemplateColumns = 'repeat(' + size + ', 1fr)';
+    bingo.style.gridTemplateRows = 'repeat(' + size + ', 1fr)';
+
+    let itemIndex = 0;
+    for (let i = 0; i < size * size; i++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      if (useFree && i === 12) {
+        cell.textContent = 'FREE';
+        cell.style.fontWeight = 'bold';
+        cell.style.fontSize = '28px';
+      } else {
+        const text = selected[itemIndex++];
+        cell.textContent = text;
+        adjustFontSize(cell, text);
+      }
+      bingo.appendChild(cell);
+    }
+
+    page.appendChild(bingo);
+
+    const footer = document.createElement('div');
+    footer.className = 'footer';
+    footer.textContent = count > 1 ? 'Card ' + c : '';
+    page.appendChild(footer);
+
+    output.appendChild(page);
+  }
+
+  status.textContent = '已產生 ' + count + ' 張 ' + size + 'x' + size + ' Bingo。';
+}
+
+function clearItems() {
+  document.getElementById('items').value = '';
+  document.getElementById('items').focus();
+}
+
+generateCards();
+</script>
+</body>
+</html>
